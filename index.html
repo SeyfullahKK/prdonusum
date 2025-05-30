@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOGRT Gruplandırıcı</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+            max-width: 1200px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+        }
+
+        .version-selector {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .version-selector label {
+            font-weight: 600;
+            color: #495057;
+            margin-right: 10px;
+        }
+
+        .version-selector select {
+            padding: 8px 15px;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .version-selector select:hover {
+            border-color: #667eea;
+        }
+
+        .version-selector select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .panel:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.1);
+        }
+
+        .panel-title {
+            font-size: 1.2em;
+            color: #495057;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .file-drop {
+            border: 2px dashed #ced4da;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: white;
+        }
+
+        .file-drop:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .file-drop.active {
+            border-color: #667eea;
+            background: #e8ecff;
+        }
+
+        .file-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .json-preview {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            max-height: 400px;
+            margin-top: 15px;
+        }
+
+        .controls-list {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .control-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .control-name {
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .control-type {
+            background: #667eea;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.85em;
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: block;
+            margin: 30px auto 0;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .success-message {
+            background: #28a745;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .error-message {
+            background: #dc3545;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .warning-icon {
+            font-size: 1.5em;
+        }
+
+        .info-text {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .file-info {
+            background: #e7f3ff;
+            border: 1px solid #b8daff;
+            color: #004085;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .file-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0 0 0;
+        }
+
+        .file-list li {
+            padding: 5px 0;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <!-- JSZip kütüphanesi -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 MOGRT Gruplandırıcı</h1>
+        <p class="subtitle">MOGRT dosyalarınızı otomatik olarak gruplandırın</p>
+        
+        <div class="version-selector">
+            <label for="premiereVersion">Premiere Pro Versiyonunuz:</label>
+            <select id="premiereVersion">
+                <option value="2024">Premiere Pro 2024 (v25.x)</option>
+                <option value="2023">Premiere Pro 2023 (v23.x - v24.x)</option>
+                <option value="2022">Premiere Pro 2022 (v22.x)</option>
+                <option value="2021">Premiere Pro 2021 ve öncesi</option>
+            </select>
+        </div>
+        
+        <div class="grid">
+            <div class="panel">
+                <h2 class="panel-title">📥 Girdi (Gruplandırılmamış)</h2>
+                <div class="file-drop" id="inputDrop">
+                    <div class="file-icon">📦</div>
+                    <p>MOGRT dosyanızı buraya sürükleyin veya tıklayın</p>
+                    <input type="file" id="fileInput" accept=".mogrt,.json" style="display: none;">
+                </div>
+                <p class="info-text">
+                    .mogrt dosyası veya definition.json dosyası yükleyebilirsiniz
+                </p>
+                <div id="inputPreview"></div>
+            </div>
+            
+            <div class="panel">
+                <h2 class="panel-title">📤 Çıktı (Gruplandırılmış)</h2>
+                <div id="outputPreview"></div>
+            </div>
+        </div>
+        
+        <button class="button" id="convertBtn" disabled>
+            <span id="btnText">Gruplandır ve İndir</span>
+            <span class="loading" id="loading" style="display: none;"></span>
+        </button>
+        
+        <div class="success-message" id="successMsg">✅ Dönüşüm başarılı! Dosya indiriliyor...</div>
+        <div class="error-message" id="errorMsg">❌ Hata oluştu!</div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html> 
