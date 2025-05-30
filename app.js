@@ -328,13 +328,14 @@ class MOGRTGrouper {
         // Yeni clientControls dizisini oluştur
         const newClientControls = [];
         const allGroups = [];
+        const groupsOrder = []; // Grup sıralaması için
         
         // Ana grupları oluştur
         Object.keys(groups).forEach(groupName => {
             const groupData = groups[groupName];
             const groupId = generateUUID();
             const groupControlIds = [];
-            const subGroupObjects = [];
+            const subGroups = [];
             
             // Alt grupları oluştur
             Object.keys(groupData.subgroups).forEach(subGroupName => {
@@ -358,7 +359,11 @@ class MOGRTGrouper {
                     value: subGroupControlIds
                 };
                 
-                subGroupObjects.push(subGroup);
+                subGroups.push({
+                    group: subGroup,
+                    controls: subGroupData.controls
+                });
+                
                 groupControlIds.push(subGroupId);
                 allGroups.push(subGroup);
             });
@@ -385,19 +390,37 @@ class MOGRTGrouper {
                 value: groupControlIds
             };
             
-            // Sıralama: Ana grup, alt gruplar, kontrolller
-            newClientControls.push(mainGroup);
-            newClientControls.push(...subGroupObjects);
-            
-            // Alt grupların kontrollerini ekle
-            Object.keys(groupData.subgroups).forEach(subGroupName => {
-                newClientControls.push(...groupData.subgroups[subGroupName].controls);
-            });
-            
-            // Ana grubun direkt kontrollerini ekle
-            newClientControls.push(...groupData.controls);
-            
             allGroups.push(mainGroup);
+            
+            // Grup sıralaması için sakla
+            groupsOrder.push({
+                mainGroup: mainGroup,
+                subGroups: subGroups,
+                directControls: groupData.controls
+            });
+        });
+        
+        // Premiere Pro için doğru sıralama ile clientControls'ı oluştur
+        // Önce tüm grupları ekle (ana gruplar ve alt gruplar)
+        groupsOrder.forEach(groupInfo => {
+            newClientControls.push(groupInfo.mainGroup);
+        });
+        
+        // Sonra alt grupları ekle
+        groupsOrder.forEach(groupInfo => {
+            groupInfo.subGroups.forEach(subGroupInfo => {
+                newClientControls.push(subGroupInfo.group);
+            });
+        });
+        
+        // En son kontrolleri ekle
+        groupsOrder.forEach(groupInfo => {
+            // Alt grup kontrollerini ekle
+            groupInfo.subGroups.forEach(subGroupInfo => {
+                newClientControls.push(...subGroupInfo.controls);
+            });
+            // Ana grup direkt kontrollerini ekle
+            newClientControls.push(...groupInfo.directControls);
         });
         
         // Gruplanmamış kontrolleri ekle
@@ -414,7 +437,7 @@ class MOGRTGrouper {
             const capsuleParams = [...this.outputData.sourceInfoLocalized.en_US.capsuleparams.capParams];
             const newCapParams = [];
             
-            // Grup parametrelerini ekle
+            // Önce tüm grup parametrelerini ekle
             allGroups.forEach(group => {
                 const groupParam = {
                     capPropAnimatable: false,
@@ -427,16 +450,18 @@ class MOGRTGrouper {
                 newCapParams.push(groupParam);
             });
             
-            // Kontrol parametrelerini güncelle
-            capsuleParams.forEach(param => {
-                // Grup parametresi değilse
-                if (param.capPropType !== 8) {
-                    // UI ismindeki | karakterlerini kaldır
-                    if (param.capPropUIName && param.capPropUIName.includes(' | ')) {
-                        const parts = param.capPropUIName.split(' | ');
-                        param.capPropUIName = parts[parts.length - 1];
+            // Sonra kontrol parametrelerini ekle (sırayı koru)
+            this.outputData.clientControls.forEach(item => {
+                if (item.type !== 10) { // Grup değilse
+                    const existingParam = capsuleParams.find(p => p.capPropMatchName === item.id);
+                    if (existingParam) {
+                        // UI ismindeki | karakterlerini kaldır
+                        if (existingParam.capPropUIName && existingParam.capPropUIName.includes(' | ')) {
+                            const parts = existingParam.capPropUIName.split(' | ');
+                            existingParam.capPropUIName = parts[parts.length - 1];
+                        }
+                        newCapParams.push(existingParam);
                     }
-                    newCapParams.push(param);
                 }
             });
             
