@@ -14,6 +14,7 @@ class MOGRTGrouper {
         this.outputData = null;
         this.mogrtFiles = null;
         this.isProcessingMOGRT = false;
+        this.originalFileName = null; // Orijinal dosya adını sakla
         this.initializeEventListeners();
     }
 
@@ -58,6 +59,9 @@ class MOGRTGrouper {
 
     async processFile(file) {
         const fileName = file.name.toLowerCase();
+        
+        // Orijinal dosya adını sakla (uzantısız)
+        this.originalFileName = file.name.replace(/\.[^/.]+$/, "");
         
         if (fileName.endsWith('.mogrt')) {
             // MOGRT dosyası işle
@@ -224,116 +228,183 @@ class MOGRTGrouper {
                 this.outputData.mobileCompatibilityVersion = "202410";
                 this.outputData.apiVersion = "2.0";
                 this.outputData.responsiveDesignVersion = "1";
-                if (this.outputData.typekitOnlyVersion) {
-                    this.outputData.typekitOnlyVersion = "202410";
-                }
+                this.outputData.typekitOnlyVersion = "202410";
+                this.outputData.internalEffectsOnlyVersion = "0";
                 break;
                 
             case '2023':
                 // Premiere Pro 2023 (v23.x - v24.x)
-                this.outputData.aelibCompliantVersion = "202310";
-                this.outputData.mobileCompatibilityVersion = "202310";
+                this.outputData.aelibCompliantVersion = "202110"; // 2023 için daha eski versiyon
+                this.outputData.mobileCompatibilityVersion = "201904";
                 this.outputData.apiVersion = "1.9";
-                this.outputData.responsiveDesignVersion = "1";
-                if (this.outputData.typekitOnlyVersion) {
-                    this.outputData.typekitOnlyVersion = "202310";
-                }
+                this.outputData.responsiveDesignVersion = "0";
+                this.outputData.typekitOnlyVersion = "201710";
+                this.outputData.internalEffectsOnlyVersion = "0";
                 break;
                 
             case '2022':
                 // Premiere Pro 2022 (v22.x)
-                this.outputData.aelibCompliantVersion = "202210";
-                this.outputData.mobileCompatibilityVersion = "202210";
+                this.outputData.aelibCompliantVersion = "201710";
+                this.outputData.mobileCompatibilityVersion = "201904";
                 this.outputData.apiVersion = "1.9";
                 this.outputData.responsiveDesignVersion = "0";
-                if (this.outputData.typekitOnlyVersion) {
-                    this.outputData.typekitOnlyVersion = "202210";
-                }
+                this.outputData.typekitOnlyVersion = "201710";
+                this.outputData.internalEffectsOnlyVersion = "0";
                 break;
                 
             case '2021':
             default:
                 // Premiere Pro 2021 ve öncesi
                 this.outputData.aelibCompliantVersion = "201710";
-                this.outputData.mobileCompatibilityVersion = "201904";
+                this.outputData.mobileCompatibilityVersion = "0";
                 this.outputData.apiVersion = "1.9";
                 this.outputData.responsiveDesignVersion = "0";
-                if (this.outputData.typekitOnlyVersion) {
-                    this.outputData.typekitOnlyVersion = "201710";
-                }
+                this.outputData.typekitOnlyVersion = "0";
+                this.outputData.internalEffectsOnlyVersion = "0";
                 break;
         }
         
         // Platform desteğini kontrol et ve güncelle
         this.outputData.platformSupport = ["ppro"];
         
-        // internalEffectsOnlyVersion güncelle
-        if (this.outputData.internalEffectsOnlyVersion !== undefined) {
-            this.outputData.internalEffectsOnlyVersion = "0";
-        }
+        // Gruplandırma için veri yapısı
+        const groups = {};
+        const ungroupedControls = [];
         
-        // Kontrolleri kategorize et
-        const globalControls = [];
-        const sceneControls = [];
-        const globalControlIds = [];
-        const sceneControlIds = [];
-        
-        // Mevcut kontrolleri kopyala ve kategorize et
+        // Mevcut kontrolleri analiz et
         const originalControls = [...this.outputData.clientControls];
         
         originalControls.forEach(control => {
-            const name = control.uiName.strDB[0].str.toLowerCase();
+            const name = control.uiName.strDB[0].str;
+            const parts = name.split(' | ');
             
-            if (name.includes('global') || name.includes('position') || 
-                name.includes('scale') || name.includes('rotation')) {
-                globalControls.push(control);
-                globalControlIds.push(control.id);
-            } else if (name.includes('color') || name.includes('scene')) {
-                sceneControls.push(control);
-                sceneControlIds.push(control.id);
+            if (parts.length === 1) {
+                // Grup yok, direkt ekle
+                ungroupedControls.push(control);
+            } else if (parts.length === 2) {
+                // Ana grup var
+                const groupName = parts[0];
+                const controlName = parts[1];
+                
+                if (!groups[groupName]) {
+                    groups[groupName] = {
+                        name: groupName,
+                        controls: [],
+                        subgroups: {}
+                    };
+                }
+                
+                // Kontrol ismini güncelle
+                control.uiName.strDB[0].str = controlName;
+                groups[groupName].controls.push(control);
+                
+            } else if (parts.length === 3) {
+                // Ana grup ve alt grup var
+                const mainGroupName = parts[0];
+                const subGroupName = parts[1];
+                const controlName = parts[2];
+                
+                if (!groups[mainGroupName]) {
+                    groups[mainGroupName] = {
+                        name: mainGroupName,
+                        controls: [],
+                        subgroups: {}
+                    };
+                }
+                
+                if (!groups[mainGroupName].subgroups[subGroupName]) {
+                    groups[mainGroupName].subgroups[subGroupName] = {
+                        name: subGroupName,
+                        controls: []
+                    };
+                }
+                
+                // Kontrol ismini güncelle
+                control.uiName.strDB[0].str = controlName;
+                groups[mainGroupName].subgroups[subGroupName].controls.push(control);
             }
         });
         
-        // Grup objelerini oluştur
-        const globalGroup = {
-            canAnimate: true,
-            groupexpanded: false,
-            id: "169dba00-cb75-421a-ae83-b505e5fcbedf", // Sabit ID kullan
-            type: 10,
-            uiName: {
-                strDB: [{
-                    localeString: "en_US",
-                    str: "Global Controllers"
-                }]
-            },
-            uiSuffix: { strDB: [{ localeString: "en_US", str: "" }] },
-            uiToolTip: { strDB: [{ localeString: "en_US", str: "" }] },
-            value: globalControlIds
-        };
+        // Yeni clientControls dizisini oluştur
+        const newClientControls = [];
+        const allGroups = [];
         
-        const sceneGroup = {
-            canAnimate: true,
-            groupexpanded: false,
-            id: "4a94e43d-b2b2-49bd-a50d-381bff108136", // Sabit ID kullan
-            type: 10,
-            uiName: {
-                strDB: [{
-                    localeString: "en_US",
-                    str: "Scene Controllers"
-                }]
-            },
-            uiSuffix: { strDB: [{ localeString: "en_US", str: "" }] },
-            uiToolTip: { strDB: [{ localeString: "en_US", str: "" }] },
-            value: sceneControlIds
-        };
+        // Ana grupları oluştur
+        Object.keys(groups).forEach(groupName => {
+            const groupData = groups[groupName];
+            const groupId = generateUUID();
+            const groupControlIds = [];
+            const subGroupObjects = [];
+            
+            // Alt grupları oluştur
+            Object.keys(groupData.subgroups).forEach(subGroupName => {
+                const subGroupData = groupData.subgroups[subGroupName];
+                const subGroupId = generateUUID();
+                const subGroupControlIds = subGroupData.controls.map(c => c.id);
+                
+                const subGroup = {
+                    canAnimate: true,
+                    groupexpanded: false,
+                    id: subGroupId,
+                    type: 10,
+                    uiName: {
+                        strDB: [{
+                            localeString: "en_US",
+                            str: subGroupName
+                        }]
+                    },
+                    uiSuffix: { strDB: [{ localeString: "en_US", str: "" }] },
+                    uiToolTip: { strDB: [{ localeString: "en_US", str: "" }] },
+                    value: subGroupControlIds
+                };
+                
+                subGroupObjects.push(subGroup);
+                groupControlIds.push(subGroupId);
+                allGroups.push(subGroup);
+            });
+            
+            // Ana grubun direkt kontrollerini ekle
+            groupData.controls.forEach(control => {
+                groupControlIds.push(control.id);
+            });
+            
+            // Ana grup objesini oluştur
+            const mainGroup = {
+                canAnimate: true,
+                groupexpanded: false,
+                id: groupId,
+                type: 10,
+                uiName: {
+                    strDB: [{
+                        localeString: "en_US",
+                        str: groupName
+                    }]
+                },
+                uiSuffix: { strDB: [{ localeString: "en_US", str: "" }] },
+                uiToolTip: { strDB: [{ localeString: "en_US", str: "" }] },
+                value: groupControlIds
+            };
+            
+            // Sıralama: Ana grup, alt gruplar, kontrolller
+            newClientControls.push(mainGroup);
+            newClientControls.push(...subGroupObjects);
+            
+            // Alt grupların kontrollerini ekle
+            Object.keys(groupData.subgroups).forEach(subGroupName => {
+                newClientControls.push(...groupData.subgroups[subGroupName].controls);
+            });
+            
+            // Ana grubun direkt kontrollerini ekle
+            newClientControls.push(...groupData.controls);
+            
+            allGroups.push(mainGroup);
+        });
         
-        // clientControls'ı yeniden düzenle - sıralama önemli!
-        this.outputData.clientControls = [
-            globalGroup,
-            ...globalControls,
-            sceneGroup,
-            ...sceneControls
-        ];
+        // Gruplanmamış kontrolleri ekle
+        newClientControls.push(...ungroupedControls);
+        
+        // clientControls'ı güncelle
+        this.outputData.clientControls = newClientControls;
         
         // capsuleparams'ı güncelle
         if (this.outputData.sourceInfoLocalized && 
@@ -341,46 +412,37 @@ class MOGRTGrouper {
             this.outputData.sourceInfoLocalized.en_US.capsuleparams) {
             
             const capsuleParams = [...this.outputData.sourceInfoLocalized.en_US.capsuleparams.capParams];
+            const newCapParams = [];
             
             // Grup parametrelerini ekle
-            const globalGroupParam = {
-                capPropAnimatable: false,
-                capPropDefault: globalControlIds,
-                capPropGroupExpanded: false,
-                capPropMatchName: globalGroup.id,
-                capPropType: 8,
-                capPropUIName: "Global Controllers"
-            };
+            allGroups.forEach(group => {
+                const groupParam = {
+                    capPropAnimatable: false,
+                    capPropDefault: group.value,
+                    capPropGroupExpanded: false,
+                    capPropMatchName: group.id,
+                    capPropType: 8,
+                    capPropUIName: group.uiName.strDB[0].str
+                };
+                newCapParams.push(groupParam);
+            });
             
-            const sceneGroupParam = {
-                capPropAnimatable: false,
-                capPropDefault: sceneControlIds,
-                capPropGroupExpanded: false,
-                capPropMatchName: sceneGroup.id,
-                capPropType: 8,
-                capPropUIName: "Scene Controllers"
-            };
-            
-            // Parametreleri yeniden düzenle - orijinal sırayı koru
-            const globalParams = [];
-            const sceneParams = [];
-            
+            // Kontrol parametrelerini güncelle
             capsuleParams.forEach(param => {
-                if (globalControlIds.includes(param.capPropMatchName)) {
-                    globalParams.push(param);
-                } else if (sceneControlIds.includes(param.capPropMatchName)) {
-                    sceneParams.push(param);
+                // Grup parametresi değilse
+                if (param.capPropType !== 8) {
+                    // UI ismindeki | karakterlerini kaldır
+                    if (param.capPropUIName && param.capPropUIName.includes(' | ')) {
+                        const parts = param.capPropUIName.split(' | ');
+                        param.capPropUIName = parts[parts.length - 1];
+                    }
+                    newCapParams.push(param);
                 }
             });
             
-            this.outputData.sourceInfoLocalized.en_US.capsuleparams.capParams = [
-                globalGroupParam,
-                ...globalParams,
-                sceneGroupParam,
-                ...sceneParams
-            ];
+            this.outputData.sourceInfoLocalized.en_US.capsuleparams.capParams = newCapParams;
             
-            // appspecificsourceinfo güncelleme (eğer varsa)
+            // appspecificsourceinfo güncelleme
             if (this.outputData.sourceInfoLocalized.en_US.appspecificsourceinfo) {
                 try {
                     const appInfo = JSON.parse(this.outputData.sourceInfoLocalized.en_US.appspecificsourceinfo);
@@ -389,16 +451,20 @@ class MOGRTGrouper {
                     switch (selectedVersion) {
                         case '2024':
                             appInfo.version = 11;
+                            appInfo.useAELib = true;
                             break;
                         case '2023':
                             appInfo.version = 10;
+                            appInfo.useAELib = false;
                             break;
                         case '2022':
                             appInfo.version = 10;
+                            appInfo.useAELib = false;
                             break;
                         case '2021':
                         default:
                             appInfo.version = 10;
+                            appInfo.useAELib = false;
                             break;
                     }
                     
@@ -417,30 +483,90 @@ class MOGRTGrouper {
         
         let groupsHtml = '<div class="controls-list"><h3>Oluşturulan Gruplar:</h3>';
         
-        // Grupları göster
-        this.outputData.clientControls.filter(c => c.type === 10).forEach(group => {
-            const name = group.uiName.strDB[0].str;
-            const controlCount = group.value.length;
-            groupsHtml += `
-                <div class="control-item">
-                    <span class="control-name">📁 ${name}</span>
-                    <span class="control-type">${controlCount} kontrol</span>
-                </div>
-            `;
-            
-            // Grup içindeki kontrolleri göster
-            group.value.forEach(controlId => {
-                const control = this.outputData.clientControls.find(c => c.id === controlId);
-                if (control) {
-                    const controlName = control.uiName.strDB[0].str;
+        // Grupları ve kontrollerini göster
+        const addedControls = new Set();
+        
+        this.outputData.clientControls.forEach(item => {
+            if (item.type === 10) {
+                // Bu bir grup
+                const name = item.uiName.strDB[0].str;
+                const controlCount = item.value.length;
+                
+                groupsHtml += `
+                    <div class="control-item">
+                        <span class="control-name">📁 ${name}</span>
+                        <span class="control-type">${controlCount} öğe</span>
+                    </div>
+                `;
+                
+                // Grup içindeki öğeleri göster
+                item.value.forEach(id => {
+                    if (!addedControls.has(id)) {
+                        const subItem = this.outputData.clientControls.find(c => c.id === id);
+                        if (subItem) {
+                            if (subItem.type === 10) {
+                                // Alt grup
+                                const subName = subItem.uiName.strDB[0].str;
+                                const subCount = subItem.value.length;
+                                groupsHtml += `
+                                    <div class="control-item" style="margin-left: 20px; background: #e9ecef;">
+                                        <span class="control-name">└─ 📂 ${subName}</span>
+                                        <span class="control-type">${subCount} kontrol</span>
+                                    </div>
+                                `;
+                                
+                                // Alt grubun kontrollerini göster
+                                subItem.value.forEach(subId => {
+                                    const control = this.outputData.clientControls.find(c => c.id === subId);
+                                    if (control && control.type !== 10) {
+                                        const controlName = control.uiName.strDB[0].str;
+                                        groupsHtml += `
+                                            <div class="control-item" style="margin-left: 40px; background: #dee2e6;">
+                                                <span class="control-name">└─ ${controlName}</span>
+                                                <span class="control-type">${this.getControlTypeName(control.type)}</span>
+                                            </div>
+                                        `;
+                                        addedControls.add(subId);
+                                    }
+                                });
+                            } else {
+                                // Direkt kontrol
+                                const controlName = subItem.uiName.strDB[0].str;
+                                groupsHtml += `
+                                    <div class="control-item" style="margin-left: 20px; background: #e9ecef;">
+                                        <span class="control-name">└─ ${controlName}</span>
+                                        <span class="control-type">${this.getControlTypeName(subItem.type)}</span>
+                                    </div>
+                                `;
+                            }
+                            addedControls.add(id);
+                        }
+                    }
+                });
+            }
+        });
+        
+        // Gruplanmamış kontrolleri göster
+        let hasUngrouped = false;
+        this.outputData.clientControls.forEach(control => {
+            if (control.type !== 10 && !addedControls.has(control.id)) {
+                if (!hasUngrouped) {
+                    hasUngrouped = true;
                     groupsHtml += `
-                        <div class="control-item" style="margin-left: 20px; background: #e9ecef;">
-                            <span class="control-name">└─ ${controlName}</span>
-                            <span class="control-type">${this.getControlTypeName(control.type)}</span>
+                        <div class="control-item" style="margin-top: 20px;">
+                            <span class="control-name">📋 Gruplanmamış Kontroller</span>
+                            <span class="control-type"></span>
                         </div>
                     `;
                 }
-            });
+                const controlName = control.uiName.strDB[0].str;
+                groupsHtml += `
+                    <div class="control-item" style="margin-left: 20px; background: #f8f9fa;">
+                        <span class="control-name">└─ ${controlName}</span>
+                        <span class="control-type">${this.getControlTypeName(control.type)}</span>
+                    </div>
+                `;
+            }
         });
         
         groupsHtml += '</div>';
@@ -498,7 +624,8 @@ class MOGRTGrouper {
         
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'grouped.mogrt';
+        // Orijinal dosya adını kullan
+        link.download = `${this.originalFileName}.mogrt`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -513,7 +640,8 @@ class MOGRTGrouper {
         
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'definition-grouped.json';
+        // JSON için de orijinal dosya adını kullan
+        link.download = this.originalFileName ? `${this.originalFileName}_grouped.json` : 'definition-grouped.json';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
