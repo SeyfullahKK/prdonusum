@@ -267,6 +267,20 @@ class MOGRTGrouper {
         // Platform desteğini kontrol et ve güncelle
         this.outputData.platformSupport = ["ppro"];
         
+        // Versiyona göre gruplandırma yap
+        if (selectedVersion === '2024') {
+            // Yeni versiyon - iç içe gruplar desteklenir
+            this.applyNestedGrouping();
+        } else {
+            // Eski versiyon - sadece tek seviye gruplar
+            this.applySingleLevelGrouping();
+        }
+        
+        this.displayOutput();
+    }
+    
+    // Yeni versiyonlar için iç içe gruplandırma (2024+)
+    applyNestedGrouping() {
         // Gruplandırma için veri yapısı
         const groups = {};
         const ungroupedControls = [];
@@ -430,6 +444,94 @@ class MOGRTGrouper {
         this.outputData.clientControls = newClientControls;
         
         // capsuleparams'ı güncelle
+        this.updateCapsuleParams(allGroups);
+    }
+    
+    // Eski versiyonlar için tek seviye gruplandırma (2023 ve öncesi)
+    applySingleLevelGrouping() {
+        // Gruplandırma için veri yapısı
+        const groups = {};
+        const ungroupedControls = [];
+        
+        // Mevcut kontrolleri analiz et
+        const originalControls = [...this.outputData.clientControls];
+        
+        originalControls.forEach(control => {
+            const name = control.uiName.strDB[0].str;
+            const parts = name.split(' | ');
+            
+            if (parts.length === 1) {
+                // Grup yok, direkt ekle
+                ungroupedControls.push(control);
+            } else {
+                // Grup var - sadece ilk seviyeyi kullan
+                const groupName = parts[0];
+                const controlName = parts.slice(1).join(' - '); // Geri kalanı birleştir
+                
+                if (!groups[groupName]) {
+                    groups[groupName] = {
+                        name: groupName,
+                        controls: []
+                    };
+                }
+                
+                // Kontrol ismini güncelle
+                control.uiName.strDB[0].str = controlName;
+                groups[groupName].controls.push(control);
+            }
+        });
+        
+        // Yeni clientControls dizisini oluştur
+        const newClientControls = [];
+        const allGroups = [];
+        
+        // Grupları oluştur
+        Object.keys(groups).forEach(groupName => {
+            const groupData = groups[groupName];
+            const groupId = generateUUID();
+            const groupControlIds = groupData.controls.map(c => c.id);
+            
+            // Grup objesini oluştur
+            const group = {
+                canAnimate: true,
+                groupexpanded: false,
+                id: groupId,
+                type: 10,
+                uiName: {
+                    strDB: [{
+                        localeString: "en_US",
+                        str: groupName
+                    }]
+                },
+                uiSuffix: { strDB: [{ localeString: "en_US", str: "" }] },
+                uiToolTip: { strDB: [{ localeString: "en_US", str: "" }] },
+                value: groupControlIds
+            };
+            
+            allGroups.push(group);
+            newClientControls.push(group);
+        });
+        
+        // Kontrolleri ekle
+        Object.keys(groups).forEach(groupName => {
+            newClientControls.push(...groups[groupName].controls);
+        });
+        
+        // Gruplanmamış kontrolleri ekle
+        newClientControls.push(...ungroupedControls);
+        
+        // clientControls'ı güncelle
+        this.outputData.clientControls = newClientControls;
+        
+        // capsuleparams'ı güncelle
+        this.updateCapsuleParams(allGroups);
+    }
+    
+    // capsuleparams güncelleme fonksiyonu
+    updateCapsuleParams(allGroups) {
+        const versionSelect = document.getElementById('premiereVersion');
+        const selectedVersion = versionSelect.value;
+        
         if (this.outputData.sourceInfoLocalized && 
             this.outputData.sourceInfoLocalized.en_US && 
             this.outputData.sourceInfoLocalized.en_US.capsuleparams) {
@@ -499,8 +601,6 @@ class MOGRTGrouper {
                 }
             }
         }
-        
-        this.displayOutput();
     }
 
     displayOutput() {
