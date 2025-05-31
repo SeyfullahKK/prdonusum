@@ -221,10 +221,6 @@ class MOGRTGrouper {
         const versionSelect = document.getElementById('premiereVersion');
         const selectedVersion = versionSelect.value;
         
-        // İç içe grup desteği kontrolü
-        const supportsNestedGroups = selectedVersion === '2024';
-        console.log(`Premiere Pro ${selectedVersion} - İç içe grup desteği: ${supportsNestedGroups ? 'EVET' : 'HAYIR'}`);
-        
         switch (selectedVersion) {
             case '2024':
                 // Premiere Pro 2024 (v25.x)
@@ -232,44 +228,53 @@ class MOGRTGrouper {
                 this.outputData.mobileCompatibilityVersion = "202410";
                 this.outputData.apiVersion = "2.0";
                 this.outputData.responsiveDesignVersion = "1";
-                this.outputData.typekitOnlyVersion = "202410";
-                this.outputData.internalEffectsOnlyVersion = "0";
+                if (this.outputData.typekitOnlyVersion) {
+                    this.outputData.typekitOnlyVersion = "202410";
+                }
                 break;
                 
             case '2023':
                 // Premiere Pro 2023 (v23.x - v24.x)
-                this.outputData.aelibCompliantVersion = "202110"; // 2023 için daha eski versiyon
-                this.outputData.mobileCompatibilityVersion = "201904";
+                this.outputData.aelibCompliantVersion = "202310";
+                this.outputData.mobileCompatibilityVersion = "202310";
                 this.outputData.apiVersion = "1.9";
-                this.outputData.responsiveDesignVersion = "0";
-                this.outputData.typekitOnlyVersion = "201710";
-                this.outputData.internalEffectsOnlyVersion = "0";
+                this.outputData.responsiveDesignVersion = "1";
+                if (this.outputData.typekitOnlyVersion) {
+                    this.outputData.typekitOnlyVersion = "202310";
+                }
                 break;
                 
             case '2022':
                 // Premiere Pro 2022 (v22.x)
-                this.outputData.aelibCompliantVersion = "201710";
-                this.outputData.mobileCompatibilityVersion = "201904";
+                this.outputData.aelibCompliantVersion = "202210";
+                this.outputData.mobileCompatibilityVersion = "202210";
                 this.outputData.apiVersion = "1.9";
                 this.outputData.responsiveDesignVersion = "0";
-                this.outputData.typekitOnlyVersion = "201710";
-                this.outputData.internalEffectsOnlyVersion = "0";
+                if (this.outputData.typekitOnlyVersion) {
+                    this.outputData.typekitOnlyVersion = "202210";
+                }
                 break;
                 
             case '2021':
             default:
                 // Premiere Pro 2021 ve öncesi
                 this.outputData.aelibCompliantVersion = "201710";
-                this.outputData.mobileCompatibilityVersion = "0";
+                this.outputData.mobileCompatibilityVersion = "201904";
                 this.outputData.apiVersion = "1.9";
                 this.outputData.responsiveDesignVersion = "0";
-                this.outputData.typekitOnlyVersion = "0";
-                this.outputData.internalEffectsOnlyVersion = "0";
+                if (this.outputData.typekitOnlyVersion) {
+                    this.outputData.typekitOnlyVersion = "201710";
+                }
                 break;
         }
         
         // Platform desteğini kontrol et ve güncelle
         this.outputData.platformSupport = ["ppro"];
+        
+        // internalEffectsOnlyVersion güncelle
+        if (this.outputData.internalEffectsOnlyVersion !== undefined) {
+            this.outputData.internalEffectsOnlyVersion = "0";
+        }
         
         // Gruplandırma için veri yapısı
         const groups = {};
@@ -308,88 +313,64 @@ class MOGRTGrouper {
                 const subGroupName = parts[1];
                 const controlName = parts[2];
                 
-                if (!supportsNestedGroups) {
-                    // Premiere Pro 2023 ve öncesi: Alt grupları düz metin olarak göster
-                    if (!groups[mainGroupName]) {
-                        groups[mainGroupName] = {
-                            name: mainGroupName,
-                            controls: [],
-                            subgroups: {}
-                        };
-                    }
-                    
-                    // Kontrol ismini alt grup bilgisiyle birlikte sakla
-                    control.uiName.strDB[0].str = `${subGroupName} - ${controlName}`;
-                    groups[mainGroupName].controls.push(control);
-                    
-                } else {
-                    // Premiere Pro 2024+: İç içe gruplar destekleniyor
-                    if (!groups[mainGroupName]) {
-                        groups[mainGroupName] = {
-                            name: mainGroupName,
-                            controls: [],
-                            subgroups: {}
-                        };
-                    }
-                    
-                    if (!groups[mainGroupName].subgroups[subGroupName]) {
-                        groups[mainGroupName].subgroups[subGroupName] = {
-                            name: subGroupName,
-                            controls: []
-                        };
-                    }
-                    
-                    // Kontrol ismini güncelle
-                    control.uiName.strDB[0].str = controlName;
-                    groups[mainGroupName].subgroups[subGroupName].controls.push(control);
+                if (!groups[mainGroupName]) {
+                    groups[mainGroupName] = {
+                        name: mainGroupName,
+                        controls: [],
+                        subgroups: {}
+                    };
                 }
+                
+                if (!groups[mainGroupName].subgroups[subGroupName]) {
+                    groups[mainGroupName].subgroups[subGroupName] = {
+                        name: subGroupName,
+                        controls: []
+                    };
+                }
+                
+                // Kontrol ismini güncelle
+                control.uiName.strDB[0].str = controlName;
+                groups[mainGroupName].subgroups[subGroupName].controls.push(control);
             }
         });
         
         // Yeni clientControls dizisini oluştur
         const newClientControls = [];
         const allGroups = [];
-        const groupsOrder = []; // Grup sıralaması için
         
         // Ana grupları oluştur
         Object.keys(groups).forEach(groupName => {
             const groupData = groups[groupName];
             const groupId = generateUUID();
             const groupControlIds = [];
-            const subGroups = [];
+            const subGroupObjects = [];
             
-            // Alt grupları oluştur (sadece 2024+ için)
-            if (supportsNestedGroups) {
-                Object.keys(groupData.subgroups).forEach(subGroupName => {
-                    const subGroupData = groupData.subgroups[subGroupName];
-                    const subGroupId = generateUUID();
-                    const subGroupControlIds = subGroupData.controls.map(c => c.id);
-                    
-                    const subGroup = {
-                        canAnimate: true,
-                        groupexpanded: false,
-                        id: subGroupId,
-                        type: 10,
-                        uiName: {
-                            strDB: [{
-                                localeString: "en_US",
-                                str: subGroupName
-                            }]
-                        },
-                        uiSuffix: { strDB: [{ localeString: "en_US", str: "" }] },
-                        uiToolTip: { strDB: [{ localeString: "en_US", str: "" }] },
-                        value: subGroupControlIds
-                    };
-                    
-                    subGroups.push({
-                        group: subGroup,
-                        controls: subGroupData.controls
-                    });
-                    
-                    groupControlIds.push(subGroupId);
-                    allGroups.push(subGroup);
-                });
-            }
+            // Alt grupları oluştur
+            Object.keys(groupData.subgroups).forEach(subGroupName => {
+                const subGroupData = groupData.subgroups[subGroupName];
+                const subGroupId = generateUUID();
+                const subGroupControlIds = subGroupData.controls.map(c => c.id);
+                
+                const subGroup = {
+                    canAnimate: true,
+                    groupexpanded: false,
+                    id: subGroupId,
+                    type: 10,
+                    uiName: {
+                        strDB: [{
+                            localeString: "en_US",
+                            str: subGroupName
+                        }]
+                    },
+                    uiSuffix: { strDB: [{ localeString: "en_US", str: "" }] },
+                    uiToolTip: { strDB: [{ localeString: "en_US", str: "" }] },
+                    value: subGroupControlIds
+                };
+                
+                subGroupObjects.push(subGroup);
+                groupControlIds.push(subGroupId);
+                allGroups.push(subGroup);
+            });
             
             // Ana grubun direkt kontrollerini ekle
             groupData.controls.forEach(control => {
@@ -413,37 +394,19 @@ class MOGRTGrouper {
                 value: groupControlIds
             };
             
-            allGroups.push(mainGroup);
+            // Sıralama: Ana grup, alt gruplar, kontrolller
+            newClientControls.push(mainGroup);
+            newClientControls.push(...subGroupObjects);
             
-            // Grup sıralaması için sakla
-            groupsOrder.push({
-                mainGroup: mainGroup,
-                subGroups: subGroups,
-                directControls: groupData.controls
+            // Alt grupların kontrollerini ekle
+            Object.keys(groupData.subgroups).forEach(subGroupName => {
+                newClientControls.push(...groupData.subgroups[subGroupName].controls);
             });
-        });
-        
-        // Premiere Pro için doğru sıralama ile clientControls'ı oluştur
-        // Önce tüm grupları ekle (ana gruplar ve alt gruplar)
-        groupsOrder.forEach(groupInfo => {
-            newClientControls.push(groupInfo.mainGroup);
-        });
-        
-        // Sonra alt grupları ekle
-        groupsOrder.forEach(groupInfo => {
-            groupInfo.subGroups.forEach(subGroupInfo => {
-                newClientControls.push(subGroupInfo.group);
-            });
-        });
-        
-        // En son kontrolleri ekle
-        groupsOrder.forEach(groupInfo => {
-            // Alt grup kontrollerini ekle
-            groupInfo.subGroups.forEach(subGroupInfo => {
-                newClientControls.push(...subGroupInfo.controls);
-            });
-            // Ana grup direkt kontrollerini ekle
-            newClientControls.push(...groupInfo.directControls);
+            
+            // Ana grubun direkt kontrollerini ekle
+            newClientControls.push(...groupData.controls);
+            
+            allGroups.push(mainGroup);
         });
         
         // Gruplanmamış kontrolleri ekle
@@ -460,7 +423,7 @@ class MOGRTGrouper {
             const capsuleParams = [...this.outputData.sourceInfoLocalized.en_US.capsuleparams.capParams];
             const newCapParams = [];
             
-            // Önce tüm grup parametrelerini ekle
+            // Grup parametrelerini ekle
             allGroups.forEach(group => {
                 const groupParam = {
                     capPropAnimatable: false,
@@ -473,24 +436,22 @@ class MOGRTGrouper {
                 newCapParams.push(groupParam);
             });
             
-            // Sonra kontrol parametrelerini ekle (sırayı koru)
-            this.outputData.clientControls.forEach(item => {
-                if (item.type !== 10) { // Grup değilse
-                    const existingParam = capsuleParams.find(p => p.capPropMatchName === item.id);
-                    if (existingParam) {
-                        // UI ismindeki | karakterlerini kaldır
-                        if (existingParam.capPropUIName && existingParam.capPropUIName.includes(' | ')) {
-                            const parts = existingParam.capPropUIName.split(' | ');
-                            existingParam.capPropUIName = parts[parts.length - 1];
-                        }
-                        newCapParams.push(existingParam);
+            // Kontrol parametrelerini güncelle
+            capsuleParams.forEach(param => {
+                // Grup parametresi değilse
+                if (param.capPropType !== 8) {
+                    // UI ismindeki | karakterlerini kaldır
+                    if (param.capPropUIName && param.capPropUIName.includes(' | ')) {
+                        const parts = param.capPropUIName.split(' | ');
+                        param.capPropUIName = parts[parts.length - 1];
                     }
+                    newCapParams.push(param);
                 }
             });
             
             this.outputData.sourceInfoLocalized.en_US.capsuleparams.capParams = newCapParams;
             
-            // appspecificsourceinfo güncelleme
+            // appspecificsourceinfo güncelleme (eğer varsa)
             if (this.outputData.sourceInfoLocalized.en_US.appspecificsourceinfo) {
                 try {
                     const appInfo = JSON.parse(this.outputData.sourceInfoLocalized.en_US.appspecificsourceinfo);
@@ -499,20 +460,16 @@ class MOGRTGrouper {
                     switch (selectedVersion) {
                         case '2024':
                             appInfo.version = 11;
-                            appInfo.useAELib = true;
                             break;
                         case '2023':
                             appInfo.version = 10;
-                            appInfo.useAELib = false;
                             break;
                         case '2022':
                             appInfo.version = 10;
-                            appInfo.useAELib = false;
                             break;
                         case '2021':
                         default:
                             appInfo.version = 10;
-                            appInfo.useAELib = false;
                             break;
                     }
                     
